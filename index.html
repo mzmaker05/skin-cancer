@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Classification</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            text-align: center;
+        }
+        form, #result, #console-predictions {
+            display: inline-block;
+            margin: auto;
+            text-align: left;
+        }
+        img {
+            width: 300px;
+            height: auto;
+        }
+        
+        .result-wrapper {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Analizador de Lunares de piel para detectar Cancer</h1>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".jpg, .jpeg, .png">
+        <input type="submit" value="Analizar">
+    </form>
+    <div class="result-wrapper">
+        <div id="result"></div>
+        <div id="console-predictions"></div>
+    </div>
+    <canvas id="predictionChart"></canvas>
+
+    <script>
+        const uploadForm = document.querySelector('form');
+        const resultDiv = document.getElementById('result');
+        const consolePredictionsDiv = document.getElementById('console-predictions');
+        const ctx = document.getElementById('predictionChart').getContext('2d');
+        let chart = null;
+
+        // Map class labels to their human-readable names
+        const classMap = {
+            'akiec': 'Actinic Keratoses',
+            'bcc': 'Basal Cell Carcinoma',
+            'bkl': 'Benign Keratosis-like Lesions',
+            'df': 'Dermatofibroma',
+            'mel': 'Melanoma',
+            'nv': 'Melanocytic Nevi',
+            'vasc': 'Vascular Lesions'
+        };
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(uploadForm);
+            
+            // Read the image file from the form
+            const fileReader = new FileReader();
+            fileReader.onload = async () => {
+                resultDiv.innerHTML = `<img src="${fileReader.result}" alt="Uploaded Image"/>`;
+
+                const response = await fetch('/', { method: 'POST', body: formData });
+
+                try {
+                    const data = await response.json();
+                    console.log('Complete JSON Response:', data);
+
+                    const predictions = data.predictions || data.prediction; // Access the correct "predictions" key
+
+                    if (predictions && predictions.length > 0) {
+                        const firstPrediction = predictions[0].predictions; // Get the first prediction's predictions array
+                        let predictionsHTML = '<h2>Resultados:</h2>';
+
+                        const labels = [];
+                        const data = [];
+
+                        for (let i = 0; i < firstPrediction.length; i++) {
+                            const predictedClass = firstPrediction[i]['class']; // Access the predicted class
+                            const confidence = firstPrediction[i]['confidence']*100; // Access the confidence
+                            const className = classMap[predictedClass]; // Get the human-readable class name
+                            predictionsHTML += `<p>${className}, Confianza: ${confidence}%</p>`;
+
+                            labels.push(className);
+                            data.push(confidence);
+                        }
+
+                        consolePredictionsDiv.innerHTML = predictionsHTML;
+
+                        if (chart) {
+                            // Update the existing chart with new data
+                            chart.data.labels = labels;
+                            chart.data.datasets[0].data = data;
+                            chart.update();
+                        } else {
+                            // Create a new chart
+                            chart = new Chart(ctx, {
+                                type: 'bar',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: '% Confianza',
+                                        data: data,
+                                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                        borderColor: 'rgba(75, 192, 192, 1)',
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    scales: {
+                                        y: {
+                                            beginAtZero: true
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        resultDiv.innerHTML = '<p>No predictions available for this image.</p>';
+                    }
+                } catch (error) {
+                    console.error('Error processing the request:', error);
+                    consolePredictionsDiv.innerHTML = '<p>Error while processing the request. Please try again later.</p>';
+                }
+            };
+            fileReader.readAsDataURL(uploadForm['file'].files[0]);
+        });
+    </script>
+</body>
+</html>
